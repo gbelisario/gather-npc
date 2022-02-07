@@ -28,22 +28,22 @@ let npcStartTime = new Date(),
 	availableCommands = "\n - up\n - down\n - left\n - right\n - confetti\n - dance\n - follow\n - ghost\n - stop\n - teleport here\n - today birthdays\n - scare\n - scream";
 
 
-if(process.env.ENABLE_ANIME_QUOTES) {
+if(process.env.ENABLE_ANIME_QUOTES !== false) {
 	availableCommands += "\n - anime quote";
 }
-if(process.env.ENABLE_INSPIRATIONAL_QUOTES) {
+if(process.env.ENABLE_INSPIRATIONAL_QUOTES !== false) {
 	availableCommands += "\n - inspire me";
 }
-if(process.env.ENABLE_JOKES) {
+if(process.env.ENABLE_JOKES !== false) {
 	availableCommands += "\n - joke\n - joke containing ABCD (search text)";
 }
-if(process.env.ENABLE_HOROSCOPE) {
+if(process.env.ENABLE_HOROSCOPE !== false) {
 	availableCommands += "\n - horoscope";
 }
-if(process.env.ENABLE_NASA) {
+if(process.env.ENABLE_NASA !== false) {
 	availableCommands += "\n - nasa";
 }
-if(process.env.ENABLE_RANDOM_FACTS) {
+if(process.env.ENABLE_RANDOM_FACTS !== false) {
 	availableCommands += "\n - random fact";
 }
 
@@ -138,37 +138,37 @@ async function start() {
 				game.chat('GLOBAL_CHAT', [], '', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 😱');
 				break;
 			case 'anime quote':
-				if(process.env.ENABLE_ANIME_QUOTES) {
+				if(process.env.ENABLE_ANIME_QUOTES !== false) {
 					animeQuote(message.senderId);
 					break;
 				}
 			case 'inspire me':
-				if(process.env.ENABLE_INSPIRATIONAL_QUOTES) {
+				if(process.env.ENABLE_INSPIRATIONAL_QUOTES !== false) {
 					inspireMe(message.senderId);
 					break;
 				}
 			case 'joke':
-				if(process.env.ENABLE_JOKES) {
+				if(process.env.ENABLE_JOKES !== false) {
 					joke(message.senderId);
 					break;
 				}
 			case 'horoscope':
-				if(process.env.ENABLE_HOROSCOPE) {
+				if(process.env.ENABLE_HOROSCOPE !== false) {
 					await horoscopeOfTheDay(message.senderId);
 					break;
 				}
 			case 'nasa':
-				if(process.env.ENABLE_NASA) {
+				if(process.env.ENABLE_NASA !== false) {
 					nasaPictureOfTheDay(message.senderId);
 					break;
 				}
 			case 'random fact':
-				if(process.env.ENABLE_RANDOM_FACTS) {
+				if(process.env.ENABLE_RANDOM_FACTS !== false) {
 					randomFact(message.senderId);
 					break;
 				}
 			default:
-				if(process.env.ENABLE_JOKES && message.contents.toLowerCase().startsWith('joke containing ')) {
+				if(process.env.ENABLE_JOKES !== false && message.contents.toLowerCase().startsWith('joke containing ')) {
 					joke(message.senderId, message.contents.toLowerCase().replace('joke containing ', ''));
 					break;
 				}
@@ -388,8 +388,8 @@ function animeQuote(playerId) {
 }
 
 function joke(playerId, contains = '') {
-	let nsfw = process.env.ENABLE_NSFW_JOKES;
-	axios.get('https://v2.jokeapi.dev/joke/Any', {params: {contains: contains, blacklistFlags: (nsfw ? '' : 'nsfw,racist,sexist,explicit,political,religious')}})
+	let nsfwEnabled = process.env.ENABLE_NSFW_JOKES;
+	axios.get('https://v2.jokeapi.dev/joke/Any', {params: {contains: contains, blacklistFlags: (nsfwEnabled ? '' : 'nsfw,racist,sexist,explicit,political,religious')}})
 		.then(response => {
 			if(response.data.error) {
 				game.chat(playerId, [], '', response.data.message);
@@ -508,7 +508,6 @@ game.subscribeToConnection(async (connected) => {
 			}
 			else if(game.players[game.engine.clientUid]) {
 				clearInterval(initIntervalId);
-				console.log(game.getPlayer(game.engine.clientUid))
 
 				let npc = await knex('person')
 					.where({player_id: game.engine.clientUid})
