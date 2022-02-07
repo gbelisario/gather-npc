@@ -27,7 +27,7 @@ This is a Heroku-ready project. The instructions for configuring it are below
 
 - [Gather API key](https://gather.town/apiKeys) (login with a different email to create an account for the NPC, or it will join as you)
 - [NASA API key](https://api.nasa.gov/#signUp) (this key optional, used only for the NASA's Astronomy Picture of the Day)
-- Get the space's id:
+- Get the space's id:  
 ![Contribution guidelines for this project](readme_images/copy-space-url.jpg)
 
 
