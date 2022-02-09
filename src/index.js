@@ -38,9 +38,6 @@ if(process.env.ENABLE_INSPIRATIONAL_QUOTES !== false) {
 if(process.env.ENABLE_JOKES !== false) {
 	availableCommands += "\n - joke\n - joke containing ABCD (search text)";
 }
-if(process.env.ENABLE_DAD_JOKES !== false) {
-	availableCommands += "\n - dad joke";
-}
 if(process.env.ENABLE_HOROSCOPE !== false) {
 	availableCommands += "\n - horoscope";
 }
@@ -154,11 +151,6 @@ async function start() {
 			case 'joke':
 				if(process.env.ENABLE_JOKES !== false) {
 					joke(message.senderId);
-					break;
-				}
-			case 'dad joke':
-				if(process.env.ENABLE_DAD_JOKES !== false) {
-					dadJoke(message.senderId);
 					break;
 				}
 			case 'horoscope':
@@ -415,16 +407,6 @@ function joke(playerId, contains = '') {
 		})
 		.catch(error => {
 			game.chat(playerId, [], '', "Error getting a joke: " + error.message);
-		});
-}
-
-function dadJoke(playerId) {
-	axios.get('https://icanhazdadjoke.com')
-		.then(response => {
-			game.chat(playerId, [], '', response.data.joke);
-		})
-		.catch(error => {
-			game.chat(playerId, [], '', "Error getting a dad joke: " + error.message);
 		});
 }
 
