@@ -71,7 +71,7 @@ async function start() {
 			else if(person.last_greeting === null || format(Date.parse(person.last_greeting), 'yyyy-MM-dd') !== today || ((new Date()) - npcStartTime) > 5*60*1000) { //check if hasn't greeted the person before or if is running for at least 5 minutes (avoids greeting everytime the npc starts)
 				game.chat(person.player_id, [], '', getGreeting(person.name));
 				await knex('person')
-					.update({last_greeting: today})
+					.update({last_greeting: today, updated_at: knex.fn.now()})
 					.where({player_id: person.player_id});
 			}
 			if(person.birthday === null) {
@@ -175,7 +175,7 @@ async function start() {
 				if (message.messageType === 'DM') {
 					if(isValidBirthday(message.contents)) {
 						let person = await knex('person')
-							.update({birthday: message.contents})
+							.update({birthday: message.contents, updated_at: knex.fn.now()})
 							.where({player_id: message.senderId})
 							.returning('*');
 						game.chat(message.senderId, [], '', 'Birthday noted!');
@@ -520,7 +520,7 @@ game.subscribeToConnection(async (connected) => {
 				}
 				else if(!npc.is_npc) {
 					await knex('person')
-						.update({is_npc: true})
+						.update({is_npc: true, updated_at: knex.fn.now()})
 						.where({player_id: game.engine.clientUid})
 						.returning('*');
 				}
