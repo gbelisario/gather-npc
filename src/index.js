@@ -17,7 +17,8 @@ http.createServer(function (request, response) {
 // --
 
 // setup
-let npcStartTime = new Date(),
+let started = false,
+	npcStartTime = new Date(),
 	followingPlayerId = null,
 	followingPlayerIntervalId = null,
 	lastFollowingPosition = {
@@ -536,7 +537,10 @@ game.subscribeToConnection(async (connected) => {
 						}
 					}
 				}
-				await start();
+				if(!started) {
+					started = true;
+					await start();
+				}
 			}
 		}
 	}, 100);
