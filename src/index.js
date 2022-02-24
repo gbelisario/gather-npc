@@ -17,8 +17,10 @@ http.createServer(function (request, response) {
 // --
 
 // setup
-let started = false,
-	npcStartTime = new Date(),
+let respawnTime = null,
+	teleportToRandomPosition = false,
+	npcStartTime = null,
+	finishedNpcSetup = false,
 	followingPlayerId = null,
 	followingPlayerIntervalId = null,
 	lastFollowingPosition = {
@@ -26,8 +28,7 @@ let started = false,
 		y: 0,
 		count: 0
 	},
-	availableCommands = "\n - up\n - down\n - left\n - right\n - confetti\n - dance\n - follow\n - ghost\n - stop\n - teleport here\n - today birthdays\n - scare\n - scream";
-
+	availableCommands = "\n - up\n - down\n - left\n - right\n - confetti\n - dance\n - follow\n - ghost\n - stop\n - teleport here\n - random teleport\n - respawn\n - today birthdays\n - scare\n - scream";
 
 if(process.env.ENABLE_ANIME_QUOTES !== false) {
 	availableCommands += "\n - anime quote";
@@ -49,157 +50,6 @@ if(process.env.ENABLE_RANDOM_FACTS !== false) {
 }
 
 const game = new Game(process.env.GATHER_SPACE_ID, () => Promise.resolve({apiKey: process.env.GATHER_API_KEY}));
-
-async function start() {
-	// listen for joining players
-	game.subscribeToEvent('playerJoins', (data, _context) => {
-		if(_context.playerId === game.engine.clientUid) {
-			return;
-		}
-		setTimeout(async () => {
-			let today = format(new Date(), 'yyyy-MM-dd');
-			let person = await knex('person')
-				.where({player_id: _context.playerId})
-				.first();
-			if (!person) {
-				let player = game.getPlayer(_context.playerId);
-				person = await knex('person')
-					.insert({player_id: _context.playerId, name: player.name})
-					.returning('*');
-				person = person[0];
-				game.chat(person.player_id, [], '', 'Welcome, ' + person.name + '!');
-			}
-			else if(person.last_greeting === null || format(Date.parse(person.last_greeting), 'yyyy-MM-dd') !== today || ((new Date()) - npcStartTime) > 5*60*1000) { //check if hasn't greeted the person before or if is running for at least 5 minutes (avoids greeting everytime the npc starts)
-				game.chat(person.player_id, [], '', getGreeting(person.name));
-				await knex('person')
-					.update({last_greeting: today, updated_at: knex.fn.now()})
-					.where({player_id: person.player_id});
-			}
-			if(person.birthday === null) {
-				game.chat(person.player_id, [], '', "Can you tell me when is your birthday?\nSend me a message with the format: DD/MM");
-			}
-			else if(format(new Date(), 'dd/MM') === person.birthday) {
-				game.chat(person.player_id, [], '', 'Happy birthday! 🥳🎉🎈');
-			}
-		}, 2000);
-	});
-
-	// listen for chats
-	game.subscribeToEvent('playerChats', async (data, _context) => {
-		// console.log(data);
-		const message = data.playerChats;
-		// console.log(message);
-		if(message.senderId === game.engine.clientUid) {
-			return;
-		}
-		switch (message.contents.toLowerCase()) {
-			case 'up':
-				game.move(MoveDirection.Up);
-				break;
-			case 'down':
-				game.move(MoveDirection.Down);
-				break;
-			case 'left':
-				game.move(MoveDirection.Left);
-				break;
-			case 'right':
-				game.move(MoveDirection.Right);
-				break;
-			case 'confetti':
-				game.shootConfetti();
-				break;
-			case 'dance':
-				game.move(MoveDirection.Dance);
-				break;
-			case 'follow':
-				game.chat(message.senderId, [], '', 'Right behind you!');
-				follow(message.senderId);
-				break;
-			case 'ghost':
-				game.ghost(1);
-				break;
-			case 'stop':
-				game.move(MoveDirection.Down, true);
-				stopFollowing();
-				game.ghost(0);
-				break;
-			case 'teleport here':
-				game.chat(message.senderId, [], '', 'On my way!');
-				let playerFront = getPlayerFront(message.senderId);
-				game.teleport('', playerFront.x, playerFront.y);
-				game.move(playerFront.faceDirection, true);
-				break;
-			case 'today birthdays':
-				game.chat(message.senderId, [], '', await todayBirthdays());
-				break;
-			case 'scare':
-				game.chat('GLOBAL_CHAT', [], '', 'BUUUUUU! 👻');
-				break;
-			case 'scream':
-				game.chat('GLOBAL_CHAT', [], '', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 😱');
-				break;
-			case 'anime quote':
-				if(process.env.ENABLE_ANIME_QUOTES !== false) {
-					animeQuote(message.senderId);
-					break;
-				}
-			case 'inspire me':
-				if(process.env.ENABLE_INSPIRATIONAL_QUOTES !== false) {
-					inspireMe(message.senderId);
-					break;
-				}
-			case 'joke':
-				if(process.env.ENABLE_JOKES !== false) {
-					joke(message.senderId);
-					break;
-				}
-			case 'horoscope':
-				if(process.env.ENABLE_HOROSCOPE !== false) {
-					await horoscopeOfTheDay(message.senderId);
-					break;
-				}
-			case 'nasa':
-				if(process.env.ENABLE_NASA !== false) {
-					nasaPictureOfTheDay(message.senderId);
-					break;
-				}
-			case 'random fact':
-				if(process.env.ENABLE_RANDOM_FACTS !== false) {
-					randomFact(message.senderId);
-					break;
-				}
-			default:
-				if(process.env.ENABLE_JOKES !== false && message.contents.toLowerCase().startsWith('joke containing ')) {
-					joke(message.senderId, message.contents.toLowerCase().replace('joke containing ', ''));
-					break;
-				}
-				if (message.messageType === 'DM') {
-					if(isValidBirthday(message.contents)) {
-						let person = await knex('person')
-							.update({birthday: message.contents, updated_at: knex.fn.now()})
-							.where({player_id: message.senderId})
-							.returning('*');
-						game.chat(message.senderId, [], '', 'Birthday noted!');
-						if(format(new Date(), 'dd/MM') === person.birthday) {
-							game.chat('GLOBAL_CHAT', [], '', "Hey everyone! Today's " + person.name + "'s birthday! 🥳🎉🎈");
-						}
-					}
-					else {
-						let reply = 'What do you want? Available commands:' + availableCommands;
-						game.chat(message.senderId, [], '', reply);
-					}
-				}
-		}
-	});
-
-	//daily messages
-	cron.schedule('30 9 * * *', async () => { //9h30
-		let birthdays = await todayBirthdays(true);
-		if (birthdays.length > 0) {
-			game.chat('GLOBAL_CHAT', [], '', birthdays);
-		}
-	});
-}
 
 function getPlayerBack(playerId) {
 	let player = game.getPlayer(playerId);
@@ -341,6 +191,18 @@ function stopFollowing() {
 	}
 	followingPlayerIntervalId = null;
 	followingPlayerId = null;
+}
+
+function randomTeleport() {
+	let map = game.completeMaps[game.getStats().currentMap],
+		searching = true;
+	while(searching) {
+		let position = map.floors[Math.floor(Math.random()*map.floors.length)];
+		if(!map.collisions[position.y][position.x]) {
+			game.teleport('', position.x, position.y);
+			searching = false;
+		}
+	}
 }
 
 function isValidBirthday(date) {
@@ -496,20 +358,25 @@ function getGreeting(name) {
 	return greetings[Math.floor(Math.random()*greetings.length)];
 }
 
-game.connect();
-game.subscribeToConnection(async (connected) => {
-	console.log('connected?', connected);
+game.subscribeToConnection(async (connected) => console.log('connected?', connected));
 
-	let respawned = false;
-	let initIntervalId = setInterval(async () => {
-		if(game.engine.clientUid) {
-			if(!respawned && !game.players[game.engine.clientUid]) {
-				game.respawn();
-				respawned = true;
-			}
-			else if(game.players[game.engine.clientUid]) {
-				clearInterval(initIntervalId);
+async function start() {
+	await game.connect();
+	npcStartTime = new Date();
 
+    //"keepAlive"
+	setInterval(async () => {
+		if(!game.connected || !game.engine.clientUid) {
+			return;
+		}
+		if(!game.players[game.engine.clientUid] && (respawnTime === null || ((new Date()) - respawnTime) > 10*1000)) { //if it hasnt respawned or respawned at least 10 seconds ago
+			game.respawn();
+			respawnTime = new Date();
+			teleportToRandomPosition = true;
+		}
+		else if(game.players[game.engine.clientUid]) {
+			// console.log(game.getPlayer(game.engine.clientUid))
+			if(!finishedNpcSetup) {
 				let npc = await knex('person')
 					.where({player_id: game.engine.clientUid})
 					.first();
@@ -525,23 +392,171 @@ game.subscribeToConnection(async (connected) => {
 						.where({player_id: game.engine.clientUid})
 						.returning('*');
 				}
+				finishedNpcSetup = true;
+			}
 
-				if(respawned) {
-					let map = game.completeMaps[game.getStats().currentMap],
-						searching = true;
-					while(searching) {
-						let position = map.floors[Math.floor(Math.random()*map.floors.length)];
-						if(!map.collisions[position.y][position.x]) {
-							game.teleport('', position.x, position.y);
-							searching = false;
-						}
-					}
-				}
-				if(!started) {
-					started = true;
-					await start();
-				}
+			if(teleportToRandomPosition) {
+				teleportToRandomPosition = false;
+				randomTeleport();
 			}
 		}
-	}, 100);
-});
+	}, 200);
+
+	// listen for joining players
+	game.subscribeToEvent('playerJoins', (data, _context) => {
+		if(!game.connected || !game.engine.clientUid || _context.playerId === game.engine.clientUid) {
+			return;
+		}
+		setTimeout(async () => {
+			let today = format(new Date(), 'yyyy-MM-dd');
+			let person = await knex('person')
+				.where({player_id: _context.playerId})
+				.first();
+			if (!person) {
+				let player = game.getPlayer(_context.playerId);
+				person = await knex('person')
+					.insert({player_id: _context.playerId, name: player.name})
+					.returning('*');
+				person = person[0];
+				game.chat(person.player_id, [], '', 'Welcome, ' + person.name + '!');
+			}
+			else if(person.last_greeting === null || format(Date.parse(person.last_greeting), 'yyyy-MM-dd') !== today || ((new Date()) - npcStartTime) > 5*60*1000) { //check if hasn't greeted the person before or if is running for at least 5 minutes (avoids greeting everytime the npc starts)
+				game.chat(person.player_id, [], '', getGreeting(person.name));
+				await knex('person')
+					.update({last_greeting: today, updated_at: knex.fn.now()})
+					.where({player_id: person.player_id});
+			}
+			if(person.birthday === null) {
+				game.chat(person.player_id, [], '', "Can you tell me when is your birthday?\nSend me a message with the format: DD/MM");
+			}
+			else if(format(new Date(), 'dd/MM') === person.birthday) {
+				game.chat(person.player_id, [], '', 'Happy birthday! 🥳🎉🎈');
+			}
+		}, 2000);
+	});
+
+	// listen for chats
+	game.subscribeToEvent('playerChats', async (data, _context) => {
+		// console.log(data);
+		const message = data.playerChats;
+		// console.log(message);
+		if(!game.connected || !game.engine.clientUid || message.senderId === game.engine.clientUid) {
+			return;
+		}
+		switch (message.contents.toLowerCase()) {
+			case 'up':
+				game.move(MoveDirection.Up);
+				break;
+			case 'down':
+				game.move(MoveDirection.Down);
+				break;
+			case 'left':
+				game.move(MoveDirection.Left);
+				break;
+			case 'right':
+				game.move(MoveDirection.Right);
+				break;
+			case 'confetti':
+				game.shootConfetti();
+				break;
+			case 'dance':
+				game.move(MoveDirection.Dance);
+				break;
+			case 'follow':
+				game.chat(message.senderId, [], '', 'Right behind you!');
+				follow(message.senderId);
+				break;
+			case 'ghost':
+				game.ghost(1);
+				break;
+			case 'stop':
+				game.move(MoveDirection.Down, true);
+				stopFollowing();
+				game.ghost(0);
+				break;
+			case 'teleport here':
+				game.chat(message.senderId, [], '', 'On my way!');
+				let playerFront = getPlayerFront(message.senderId);
+				game.teleport('', playerFront.x, playerFront.y);
+				game.move(playerFront.faceDirection, true);
+				break;
+			case 'random teleport':
+				game.chat(message.senderId, [], '', 'OK!');
+				randomTeleport();
+				break;
+			case 'respawn':
+				game.respawn();
+				break;
+			case 'today birthdays':
+				game.chat(message.senderId, [], '', await todayBirthdays());
+				break;
+			case 'scare':
+				game.chat('GLOBAL_CHAT', [], '', 'BUUUUUU! 👻');
+				break;
+			case 'scream':
+				game.chat('GLOBAL_CHAT', [], '', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 😱');
+				break;
+			case 'anime quote':
+				if(process.env.ENABLE_ANIME_QUOTES !== false) {
+					animeQuote(message.senderId);
+					break;
+				}
+			case 'inspire me':
+				if(process.env.ENABLE_INSPIRATIONAL_QUOTES !== false) {
+					inspireMe(message.senderId);
+					break;
+				}
+			case 'joke':
+				if(process.env.ENABLE_JOKES !== false) {
+					joke(message.senderId);
+					break;
+				}
+			case 'horoscope':
+				if(process.env.ENABLE_HOROSCOPE !== false) {
+					await horoscopeOfTheDay(message.senderId);
+					break;
+				}
+			case 'nasa':
+				if(process.env.ENABLE_NASA !== false) {
+					nasaPictureOfTheDay(message.senderId);
+					break;
+				}
+			case 'random fact':
+				if(process.env.ENABLE_RANDOM_FACTS !== false) {
+					randomFact(message.senderId);
+					break;
+				}
+			default:
+				if(process.env.ENABLE_JOKES !== false && message.contents.toLowerCase().startsWith('joke containing ')) {
+					joke(message.senderId, message.contents.toLowerCase().replace('joke containing ', ''));
+					break;
+				}
+				if (message.messageType === 'DM') {
+					if(isValidBirthday(message.contents)) {
+						let person = await knex('person')
+							.update({birthday: message.contents, updated_at: knex.fn.now()})
+							.where({player_id: message.senderId})
+							.returning('*');
+						game.chat(message.senderId, [], '', 'Birthday noted!');
+						if(format(new Date(), 'dd/MM') === person.birthday) {
+							game.chat('GLOBAL_CHAT', [], '', "Hey everyone! Today's " + person.name + "'s birthday! 🥳🎉🎈");
+						}
+					}
+					else {
+						let reply = 'What do you want? Available commands:' + availableCommands;
+						game.chat(message.senderId, [], '', reply);
+					}
+				}
+		}
+	});
+
+	//daily messages
+	cron.schedule('30 9 * * *', async () => { //9h30
+		let birthdays = await todayBirthdays(true);
+		if (birthdays.length > 0) {
+			game.chat('GLOBAL_CHAT', [], '', birthdays);
+		}
+	});
+}
+
+start();
